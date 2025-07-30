@@ -137,19 +137,19 @@ def main():
 
     if use_ngrok:
         listener = ngrok.forward(str(self_addr), authtoken_from_env=True, domain=DOMAIN)
-        print(f'Ingress established at {listener.url()}\n')
     else:
         print("'DOMAIN' is not set in .env. Skipping ngrok. Proxy will not work on smartphones!\n")
 
     # Start server
     if use_ngrok:
-        print(f"Forwarding http://{self_addr}/tcp and https://{DOMAIN}/tcp to tcp://{tcp_addr}...\n")
+        print(f"Forwarding http://{self_addr}/tcp and https://{DOMAIN}/tcp to tcp://{tcp_addr}")
         if http_addr:
-            print(f"Forwarding http://{self_addr}/ or https://{DOMAIN}/ to http://{http_addr}...\n")
+            print(f"Forwarding http://{self_addr} or https://{DOMAIN} to http://{http_addr}")
     else:
-        print(f"Forwarding http://{self_addr}/tcp to tcp://{tcp_addr}...\n")
+        print(f"Forwarding http://{self_addr}/tcp to tcp://{tcp_addr}")
         if http_addr:
-            print(f"Forwarding http://{self_addr}/ to http://{http_addr}...\n")
+            print(f"Forwarding http://{self_addr} to http://{http_addr}")
+    print()
 
     try:
         app.run(host=self_addr.host, port=self_addr.port)
