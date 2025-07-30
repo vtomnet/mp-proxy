@@ -48,7 +48,7 @@ def parse_addr(addr: str) -> Address:
 def send_tcp_message(target_addr: Address, data: bytes) -> bytes:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client:
-            client.settimeout(10.0)  # 10 second timeout
+            client.settimeout(5.0)
 
             print("Beginning to connect...")
             client.connect((target_addr.host, target_addr.port))
