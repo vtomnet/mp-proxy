@@ -17,7 +17,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='TCP/HTTP Proxy Server')
     parser.add_argument('--http', type=str, default=None,
         help="Enable ngrok proxy ('/') to HOST:PORT")
-    parser.add_argument('-l', '--listen', type=str, default=':3000',
+    parser.add_argument('--listen', type=str, default=':3000',
         help='Run proxy server on PORT')
     parser.add_argument('--tcp', type=str, default=':12346',
         help='HOST:PORT to proxy to (TCP)')
@@ -75,11 +75,6 @@ def send_tcp_message(target_addr: Address, data: bytes) -> bytes:
         raise Exception(f"TCP connection failed: {e}")
 
 def create_app(tcp_addr: Address, http_addr: Optional[Address] = None):
-    # Disable flask intro banner
-    logging.getLogger('werkzeug').disabled = True
-    cli = sys.modules['flask.cli']
-    cli.show_server_banner = lambda *_: None # type: ignore
-
     app = Flask(__name__)
     CORS(app)
 
@@ -106,26 +101,21 @@ def create_app(tcp_addr: Address, http_addr: Optional[Address] = None):
                 'detail': str(err)
             }), 502
 
-    # Optional dev proxy for `/` → localhost:<frontend>
     if http_addr:
-        @app.route('/', defaults={'path': ''})
-        @app.route('/<path:path>')
+        @app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
+        @app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
         def proxy_to_dev(path):
-            """Proxy requests to development server"""
             try:
                 target_url = f"http://{http_addr}/{path}"
-                query_params = dict(request.args)
-
-                # Forward the request
-                if request.method == 'GET':
-                    resp = requests.get(target_url, params=query_params)
-                elif request.method == 'POST':
-                    resp = requests.post(target_url,
-                        json=request.get_json(), params=query_params)
-                else:
-                    resp = requests.request(request.method, target_url,
-                        data=request.get_data(), params=query_params)
-
+                resp = requests.request(
+                    method=request.method,
+                    url=target_url,
+                    headers={k: v for k, v in request.headers if k.lower() != 'host'},
+                    data=request.get_data(),
+                    cookies=request.cookies,
+                    allow_redirects=False,
+                    params=dict(request.args)
+                )
                 return resp.content, resp.status_code, dict(resp.headers)
             except requests.RequestException as e:
                 return jsonify({'error': f'Proxy error: {str(e)}'}), 502
@@ -153,13 +143,13 @@ def main():
 
     # Start server
     if use_ngrok:
-        print(f"Forwarding http://{self_addr}/tcp and https://{DOMAIN}/tcp to tcp://{tcp_addr}...")
+        print(f"Forwarding http://{self_addr}/tcp and https://{DOMAIN}/tcp to tcp://{tcp_addr}...\n")
         if http_addr:
-            print(f"Forwarding http://{self_addr}/ or https://{DOMAIN}/ to http://{http_addr}...")
+            print(f"Forwarding http://{self_addr}/ or https://{DOMAIN}/ to http://{http_addr}...\n")
     else:
-        print(f"Forwarding http://{self_addr}/tcp to tcp://{tcp_addr}...")
+        print(f"Forwarding http://{self_addr}/tcp to tcp://{tcp_addr}...\n")
         if http_addr:
-            print(f"Forwarding http://{self_addr}/ to http://{http_addr}...")
+            print(f"Forwarding http://{self_addr}/ to http://{http_addr}...\n")
 
     try:
         app.run(host=self_addr.host, port=self_addr.port)
