@@ -7,6 +7,7 @@ This bridges the [Mission Planner client app](https://github.com/thomasm6m6/mpui
 1. Obtain an auth token and domain at https://ngrok.io.
 2. Create a `.env` file with `NGROK_AUTHTOKEN` and `DOMAIN`.
 3. Run `python3 proxy.py --http :3001`.
+4. Open your ngrok URL in a browser.
 
 ## More info
 
