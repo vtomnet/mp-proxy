@@ -145,7 +145,10 @@ def init_server(to_tcp_address: Address, to_http_address: Address | None):
             )
 
     app = web.Application()
-    app.add_routes([web.post('/tcp', handle_tcp)])
+    app.add_routes([
+        web.options('/tcp', handle_tcp_options),
+        web.post('/tcp', handle_tcp)
+    ])
     if to_http_address:
         app.add_routes([web.route('*', '/{path:.*}', proxy_http)])
     return app
