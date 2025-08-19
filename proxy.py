@@ -58,19 +58,22 @@ async def send_tcp_data(data, address: Address):
 def init_server(to_tcp_address: Address, to_http_address: Address | None):
     async def handle_tcp(request):
         """Handle TCP forwarding requests"""
+        headers = {'Access-Control-Allow-Origin': '*'}
         try:
             # Parse JSON body
             if request.content_type != 'application/json':
                 return web.json_response(
                     {"error": "Content-Type must be application/json"},
-                    status=400
+                    status=400,
+                    headers=headers
                 )
 
             data = await request.json()
             if 'data' not in data:
                 return web.json_response(
                     {"error": "Missing 'data' field in JSON"},
-                    status=400
+                    status=400,
+                    headers=headers
                 )
 
             # Send to TCP server
@@ -79,10 +82,20 @@ def init_server(to_tcp_address: Address, to_http_address: Address | None):
             return web.json_response({
                 "status": "success",
                 "tcp_response": tcp_response
-            })
+            }, headers=headers)
 
         except Exception as err:
-            return web.json_response({"error": str(err)}, status=500)
+            return web.json_response({"error": str(err)}, status=500, headers=headers)
+
+    async def handle_tcp_options(request):
+        return web.Response(
+            status=200,
+            headers={
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type',
+            }
+        )
 
     async def proxy_http(request):
         """Forward all other requests to HTTP server with streaming"""
