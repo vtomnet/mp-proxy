@@ -45,20 +45,6 @@ async def send_tcp_data(data, address: Address):
         logging.info(f"Sending to TCP: {data}")
         writer.write(data.encode('utf-8'))
         await writer.drain()
-
-        # Try to receive response (optional)
-        try:
-            response = await asyncio.wait_for(reader.read(1024), timeout=10.0)
-            logging.info(f"Received from TCP: {response.decode('utf-8')}")
-            writer.close()
-            await writer.wait_closed()
-            return response.decode('utf-8')
-        except asyncio.TimeoutError:
-            logging.warning("Timeout waiting for TCP response.")
-            writer.close()
-            await writer.wait_closed()
-            return "Data sent successfully"
-
     except Exception as e:
         logging.error(f"TCP connection failed: {e}")
         raise Exception(f"TCP connection failed: {str(e)}")
