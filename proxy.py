@@ -95,6 +95,16 @@ def init_server(to_tcp_address: Address, to_http_address: Address | None):
             }
         )
 
+    async def handle_http_options(request):
+        return web.Response(
+            status=200,
+            headers={
+                'Access-Control-Allow-Origin': 'https://mp.vtom.net',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            }
+        )
+
     async def proxy_http(request):
         """Forward all other requests to HTTP server with streaming"""
         try:
@@ -125,6 +135,10 @@ def init_server(to_tcp_address: Address, to_http_address: Address | None):
                     allow_redirects=False
                 ) as response:
                     response_headers = dict(response.headers)
+                    # Add CORS headers
+                    response_headers['Access-Control-Allow-Origin'] = 'https://mp.vtom.net'
+                    response_headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+                    response_headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
                     web_response = web.StreamResponse(
                         status=response.status,
                         headers=response_headers
@@ -141,7 +155,12 @@ def init_server(to_tcp_address: Address, to_http_address: Address | None):
             logging.error(f"HTTP forwarding failed: {err}")
             return web.json_response(
                 {"error": f"HTTP forwarding failed: {err}"},
-                status=502
+                status=502,
+                headers={
+                    'Access-Control-Allow-Origin': 'https://mp.vtom.net',
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                }
             )
 
     app = web.Application()
@@ -150,7 +169,10 @@ def init_server(to_tcp_address: Address, to_http_address: Address | None):
         web.post('/tcp', handle_tcp)
     ])
     if to_http_address:
-        app.add_routes([web.route('*', '/{path:.*}', proxy_http)])
+        app.add_routes([
+            web.options('/{path:.*}', handle_http_options),
+            web.route('*', '/{path:.*}', proxy_http)
+        ])
     return app
 
 if __name__ == '__main__':
