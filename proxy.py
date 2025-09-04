@@ -39,15 +39,28 @@ def parse_args():
 
 async def send_tcp_data(data, address: Address):
     """Send data to TCP server asynchronously"""
+    writer = None
     try:
         logging.info(f"Connecting to TCP server at {address}")
         reader, writer = await asyncio.open_connection(address.host, address.port)
         logging.info(f"Sending to TCP: {data}")
         writer.write(data.encode('utf-8'))
         await writer.drain()
+        
+        # Flush and close the connection properly
+        if writer.can_write_eof():
+            writer.write_eof()
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+        
     except Exception as e:
         logging.error(f"TCP connection failed: {e}")
         raise Exception(f"TCP connection failed: {str(e)}")
+    finally:
+        if writer and not writer.is_closing():
+            writer.close()
+            await writer.wait_closed()
 
 def init_server(to_tcp_address: Address, to_http_address: Address | None):
     async def handle_tcp(request):
