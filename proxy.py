@@ -33,7 +33,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='TCP/HTTP Proxy Server')
     parser.add_argument('--to-http', type=parse_address, default=None,
         dest='to_http_address', help="Enable ngrok proxy ('/') to HOST:PORT")
-    parser.add_argument('--from', type=parse_address, default=Address(port=9000),
+    parser.add_argument('--from', type=parse_address, default=Address(port=8001),
         dest='from_address', help='Run proxy server on HOST:PORT')
     parser.add_argument('--to-tcp', type=parse_address, default=Address(port=12346),
         dest='to_tcp_address', help='HOST:PORT to proxy to (TCP)')
@@ -48,14 +48,14 @@ async def send_tcp_data(data, address: Address):
         logging.info(f"Sending to TCP: {data}")
         writer.write(data.encode('utf-8'))
         await writer.drain()
-        
+
         # Flush and close the connection properly
         if writer.can_write_eof():
             writer.write_eof()
         await writer.drain()
         writer.close()
         await writer.wait_closed()
-        
+
     except Exception as e:
         logging.error(f"TCP connection failed: {e}")
         raise Exception(f"TCP connection failed: {str(e)}")
