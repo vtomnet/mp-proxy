@@ -5,7 +5,9 @@ import ngrok
 import argparse
 import logging
 from dotenv import load_dotenv
-from aiohttp import web, ClientSession, ClientTimeout
+from aiohttp import web, ClientSession, ClientTimeout, WSMsgType
+from aiohttp.web_ws import WebSocketResponse
+from aiohttp.http_exceptions import BadHttpMessage
 from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -63,6 +65,26 @@ async def send_tcp_data(data, address: Address):
             await writer.wait_closed()
 
 def init_server(to_tcp_address: Address, to_http_address: Address | None):
+    @web.middleware
+    async def error_middleware(request, handler):
+        """Middleware to handle BadHttpMethod errors gracefully"""
+        try:
+            return await handler(request)
+        except BadHttpMessage as e:
+            logging.warning(f"Invalid HTTP request from {request.remote}: {e}")
+            return web.Response(
+                text="Bad Request: Invalid HTTP method or malformed request",
+                status=400,
+                content_type='text/plain'
+            )
+        except Exception as e:
+            logging.error(f"Unexpected error handling request from {request.remote}: {e}")
+            return web.Response(
+                text="Internal Server Error",
+                status=500,
+                content_type='text/plain'
+            )
+
     async def handle_tcp(request):
         """Handle TCP forwarding requests"""
         headers = {'Access-Control-Allow-Origin': '*'}
@@ -118,9 +140,63 @@ def init_server(to_tcp_address: Address, to_http_address: Address | None):
             }
         )
 
-    async def proxy_http(request):
-        """Forward all other requests to HTTP server with streaming"""
+    async def handle_websocket(request):
+        """Handle WebSocket connections by proxying to the backend server"""
+        ws = WebSocketResponse()
+        await ws.prepare(request)
+
+        # Build target URL for WebSocket connection
+        path = request.match_info.get('path', '')
+        target_url = f"ws://{to_http_address}/{path}"
+        logging.info(f"Proxying WebSocket {request.path_qs} to {target_url}")
+
+        # Connect to backend WebSocket
+        session = ClientSession()
         try:
+            async with session.ws_connect(target_url) as backend_ws:
+                # Create bidirectional forwarding tasks
+                async def forward_to_backend():
+                    async for msg in ws:
+                        if msg.type == WSMsgType.TEXT:
+                            await backend_ws.send_str(msg.data)
+                        elif msg.type == WSMsgType.BINARY:
+                            await backend_ws.send_bytes(msg.data)
+                        elif msg.type == WSMsgType.ERROR:
+                            logging.error(f'WebSocket error: {ws.exception()}')
+                            break
+
+                async def forward_to_client():
+                    async for msg in backend_ws:
+                        if msg.type == WSMsgType.TEXT:
+                            await ws.send_str(msg.data)
+                        elif msg.type == WSMsgType.BINARY:
+                            await ws.send_bytes(msg.data)
+                        elif msg.type == WSMsgType.ERROR:
+                            logging.error(f'Backend WebSocket error: {backend_ws.exception()}')
+                            break
+
+                # Run both forwarding tasks concurrently
+                await asyncio.gather(
+                    forward_to_backend(),
+                    forward_to_client(),
+                    return_exceptions=True
+                )
+
+        except Exception as e:
+            logging.error(f"WebSocket proxy error: {e}")
+        finally:
+            await session.close()
+
+        return ws
+
+    async def proxy_http(request):
+        """Forward all other requests to HTTP server with streaming and WebSocket support"""
+        try:
+            # Check if this is a WebSocket upgrade request
+            if (request.headers.get('connection', '').lower() == 'upgrade' and
+                request.headers.get('upgrade', '').lower() == 'websocket'):
+                return await handle_websocket(request)
+
             # Build target URL
             path = request.match_info.get('path', '')
             target_url = f"http://{to_http_address}/{path}"
@@ -176,7 +252,7 @@ def init_server(to_tcp_address: Address, to_http_address: Address | None):
                 }
             )
 
-    app = web.Application()
+    app = web.Application(middlewares=[error_middleware])
     app.add_routes([
         web.options('/tcp', handle_tcp_options),
         web.post('/tcp', handle_tcp)
